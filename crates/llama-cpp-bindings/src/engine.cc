@@ -19,6 +19,13 @@ TextInferenceEngine::~TextInferenceEngine() {}
 namespace {
 constexpr size_t N_BATCH = 512;  // # per batch inference.
 constexpr size_t N_CTX = 4096;   // # max kv history.
+
+constexpr bool USE_MMAP = false;
+constexpr bool USE_MLOCK = true;
+constexpr int32_t N_GPU_LAYERS = 9999;
+constexpr uint32_t N_THREADS = 32;
+constexpr uint32_t N_THREADS_BATCH = 32;
+
 struct Request {
   Request(size_t request_id, std::vector<llama_token> input_token_ids, float temperature, uint64_t seed) :
     id(request_id),
@@ -363,7 +370,9 @@ std::unique_ptr<TextInferenceEngine> create_engine(bool use_gpu, rust::Str model
   static BackendInitializer initializer;
 
   llama_model_params model_params = llama_model_default_params();
-  model_params.n_gpu_layers = use_gpu ? 9999 : 0;
+  model_params.use_mmap = USE_MMAP;
+  model_params.use_mlock = USE_MLOCK;
+  model_params.n_gpu_layers = N_GPU_LAYERS;
   llama_model* model = llama_load_model_from_file(std::string(model_path).c_str(), model_params);
 
   if (!model) {
@@ -373,6 +382,8 @@ std::unique_ptr<TextInferenceEngine> create_engine(bool use_gpu, rust::Str model
   llama_context_params ctx_params = llama_context_default_params();
   ctx_params.n_ctx = N_CTX * parallelism;
   ctx_params.n_batch = N_BATCH;
+  ctx_params.n_threads = N_THREADS;
+  ctx_params.n_threads_batch = N_THREADS_BATCH;
   if (const char* n_thread_str = std::getenv("LLAMA_CPP_N_THREADS")) {
     int n_threads = std::stoi(n_thread_str);
     ctx_params.n_threads = n_threads;
